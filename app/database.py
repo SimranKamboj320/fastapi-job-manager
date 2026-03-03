@@ -1,8 +1,19 @@
+from slqalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-class User():
+DATABASE_URL = ""
 
-    id: int
-    name: str
-    email: str
-    password: str
-    created_at: str 
+engine = create_engine(
+    DATABASE_URL, connect_args={"check_same_thread": False}
+)
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally: 
+        db.close()
