@@ -15,3 +15,5 @@ class Project(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     owner = relationship("User", back_populates="projects")
+
+    jobs = relationship("Job", back_populates="project")
