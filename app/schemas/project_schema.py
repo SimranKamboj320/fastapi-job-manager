@@ -7,7 +7,7 @@ class ProjectCreate(BaseModel):
     description: str
 
 class ProjectResponse(BaseModel):
-    id: str
+    id: str  
     user_id: str
     name: str
     description: str

@@ -11,7 +11,7 @@ class StatusEnum(str, Enum):
     RUNNING = "RUNNING" 
     FAILED = "FAILED"
     COMPLETED = "COMPLETED"
-
+ 
 class JobCreate(BaseModel):
     name: str
     payload: Dict[str, Any]
