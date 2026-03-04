@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session
-from models.job import Job, JobStatus
-from models.project import Project
-from schemas.job_schema import JobCreate, StatusEnum, PriorityEnum
+from app.models.job import Job, JobStatus
+from app.models.project import Project
+from app.schemas.job_schema import JobCreate, StatusEnum, PriorityEnum
 from fastapi import HTTPException
-from utils.redis_service import check_rate_limit, cache_job_result, get_cached_result
+from app.services.redis_service import check_rate_limit, cache_job_result, get_cached_result
+
 import json
 import time
 import random
@@ -28,7 +29,7 @@ def create_job(db: Session, job: JobCreate, project_id: str, user_id: str):
 
     new_job = Job(
         name=job.name,
-        payload=json.dumps(job.payload),  # store JSON string
+        payload=json.dumps(job.payload),
         priority=job.priority,
         project_id=project_id
     )
@@ -37,7 +38,7 @@ def create_job(db: Session, job: JobCreate, project_id: str, user_id: str):
     db.commit()
     db.refresh(new_job)
 
-    # convert back for response
+    # Convert payload back to JSON for response
     new_job.payload = json.loads(new_job.payload)
 
     return new_job
@@ -45,15 +46,16 @@ def create_job(db: Session, job: JobCreate, project_id: str, user_id: str):
 
 # 🔹 GET JOB BY ID
 def get_job_by_id(db: Session, job_id: str):
+
     job = db.query(Job).filter(Job.id == job_id).first()
 
-    if job:
+    if job and isinstance(job.payload, str):
         job.payload = json.loads(job.payload)
 
     return job
 
 
-# 🔹 LIST JOBS WITH FILTER + PAGINATION + SORTING
+# 🔹 LIST JOBS (FILTER + PAGINATION + SORTING)
 def get_jobs(
     db: Session,
     project_id: str,
@@ -66,7 +68,6 @@ def get_jobs(
     order: str = "asc"
 ):
 
-    # Ownership check
     project = db.query(Project).filter(Project.id == project_id).first()
 
     if not project:
@@ -90,6 +91,7 @@ def get_jobs(
         query = query.filter(Job.priority == priority)
 
     allowed_sort_fields = ["created_at", "priority"]
+
     if sort_by not in allowed_sort_fields:
         sort_by = "created_at"
 
@@ -102,14 +104,15 @@ def get_jobs(
 
     jobs = query.offset((page - 1) * limit).limit(limit).all()
 
-    # Decode payload before returning
+    # Decode payload
     for job in jobs:
-        job.payload = json.loads(job.payload)
+        if isinstance(job.payload, str):
+            job.payload = json.loads(job.payload)
 
     return jobs
 
 
-# 🔹 DELETE JOB (WITH OWNERSHIP CHECK)
+# 🔹 DELETE JOB
 def delete_job(db: Session, job_id: str, user_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -120,7 +123,7 @@ def delete_job(db: Session, job_id: str, user_id: str):
             detail={"error": "Job not found"}
         )
 
-    if job.project.owner.id != user_id:
+    if job.project.user_id != user_id:
         raise HTTPException(
             status_code=403,
             detail={"error": "Unauthorized access"}
@@ -143,13 +146,13 @@ def execute_job(db: Session, job_id: str, user_id: str):
             detail={"error": "Job not found"}
         )
 
-    if job.project.owner.id != user_id:
+    if job.project.user_id != user_id:
         raise HTTPException(
             status_code=403,
             detail={"error": "Unauthorized access"}
         )
 
-    # Rate limit check
+    # Rate limit
     check_rate_limit(user_id)
 
     # Update status → RUNNING
@@ -157,7 +160,7 @@ def execute_job(db: Session, job_id: str, user_id: str):
     db.commit()
     db.refresh(job)
 
-    # Simulate processing (2–5 seconds)
+    # Simulate processing
     time.sleep(random.randint(2, 5))
 
     result = f"Processed job {job.name} successfully"
@@ -168,15 +171,16 @@ def execute_job(db: Session, job_id: str, user_id: str):
     db.commit()
     db.refresh(job)
 
-    # Cache result (TTL = 300 seconds)
+    # Cache result in Redis
     cache_job_result(job.id, result)
 
-    job.payload = json.loads(job.payload)
+    if isinstance(job.payload, str):
+        job.payload = json.loads(job.payload)
 
     return job
 
 
-# 🔹 GET JOB RESULT (WITH REDIS CACHE)
+# 🔹 GET JOB RESULT
 def get_job_result(db: Session, job_id: str, user_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -187,17 +191,17 @@ def get_job_result(db: Session, job_id: str, user_id: str):
             detail={"error": "Job not found"}
         )
 
-    if job.project.owner.id != user_id:
+    if job.project.user_id != user_id:
         raise HTTPException(
             status_code=403,
             detail={"error": "Unauthorized access"}
         )
 
-    # Check Redis first
-    cached = get_cached_result(job_id)
+    # Check Redis cache
+    cached_result = get_cached_result(job_id)
 
-    if cached:
-        return {"result": cached}
+    if cached_result:
+        return {"result": cached_result}
 
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(

@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from app.database import Base
 import uuid
  
-class User(Base): # tells that this class is a database table
+class User(Base): 
  
     __tablename__ = "users"
 

@@ -1,7 +1,7 @@
 import redis
 from fastapi import HTTPException
 
-REDIS_URL = ""
+REDIS_URL = "redis://localhost:6379"
 
 try:
     redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
