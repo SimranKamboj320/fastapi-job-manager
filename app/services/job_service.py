@@ -4,13 +4,10 @@ from app.models.project import Project
 from app.schemas.job_schema import JobCreate, StatusEnum, PriorityEnum
 from fastapi import HTTPException
 from app.services.redis_service import check_rate_limit, cache_job_result, get_cached_result
-
 import json
 import time
 import random
 
-
-# 🔹 CREATE JOB (WITH OWNERSHIP CHECK)
 def create_job(db: Session, job: JobCreate, project_id: str, user_id: str):
 
     project = db.query(Project).filter(Project.id == project_id).first()
@@ -38,13 +35,10 @@ def create_job(db: Session, job: JobCreate, project_id: str, user_id: str):
     db.commit()
     db.refresh(new_job)
 
-    # Convert payload back to JSON for response
     new_job.payload = json.loads(new_job.payload)
 
     return new_job
 
-
-# 🔹 GET JOB BY ID
 def get_job_by_id(db: Session, job_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -54,8 +48,6 @@ def get_job_by_id(db: Session, job_id: str):
 
     return job
 
-
-# 🔹 LIST JOBS (FILTER + PAGINATION + SORTING)
 def get_jobs(
     db: Session,
     project_id: str,
@@ -104,15 +96,12 @@ def get_jobs(
 
     jobs = query.offset((page - 1) * limit).limit(limit).all()
 
-    # Decode payload
     for job in jobs:
         if isinstance(job.payload, str):
             job.payload = json.loads(job.payload)
 
     return jobs
 
-
-# 🔹 DELETE JOB
 def delete_job(db: Session, job_id: str, user_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -134,8 +123,6 @@ def delete_job(db: Session, job_id: str, user_id: str):
 
     return {"message": "Job deleted successfully"}
 
-
-# 🔹 EXECUTE JOB
 def execute_job(db: Session, job_id: str, user_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -152,26 +139,21 @@ def execute_job(db: Session, job_id: str, user_id: str):
             detail={"error": "Unauthorized access"}
         )
 
-    # Rate limit
     check_rate_limit(user_id)
 
-    # Update status → RUNNING
     job.status = JobStatus.RUNNING
     db.commit()
     db.refresh(job)
 
-    # Simulate processing
     time.sleep(random.randint(2, 5))
 
     result = f"Processed job {job.name} successfully"
 
-    # Update status → COMPLETED
     job.result = result
     job.status = JobStatus.COMPLETED
     db.commit()
     db.refresh(job)
 
-    # Cache result in Redis
     cache_job_result(job.id, result)
 
     if isinstance(job.payload, str):
@@ -179,8 +161,6 @@ def execute_job(db: Session, job_id: str, user_id: str):
 
     return job
 
-
-# 🔹 GET JOB RESULT
 def get_job_result(db: Session, job_id: str, user_id: str):
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -197,7 +177,6 @@ def get_job_result(db: Session, job_id: str, user_id: str):
             detail={"error": "Unauthorized access"}
         )
 
-    # Check Redis cache
     cached_result = get_cached_result(job_id)
 
     if cached_result:
